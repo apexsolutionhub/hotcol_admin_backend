@@ -1,72 +1,56 @@
 import express from "express";
-import { ApolloServer, gql } from "apollo-server-express";
+import { ApolloServer } from "apollo-server-express";
 import cors from "cors";
-import { PrismaClient } from "./generated/prisma/index.js";
-import bcrypt from "bcryptjs";
-import 'dotenv/config';
+import "dotenv/config";
+import { typeDefs } from "./typeDefs.js";
+import { resolvers } from "./resolvers.js";
+import { authenticateRequest } from "./lib/apexAuth.js";
+import { prisma } from "./lib/prisma.js";
 
-const prisma = new PrismaClient();
-
-const typeDefs = gql`
-  type User {
-    id: Int!
-    UserName: String!
-    HotelName: String!
-    Password: String!
-    Role: String!
-    LogoUrl: String!
+function assertPrismaPricingModel() {
+  if (!prisma.subscription_pricing_rule?.findMany) {
+    console.error(
+      "\n[HotCol Apex API] Prisma client is out of date — subscription_pricing_rule is missing.\n" +
+        "  cd GraphQl-BackEnd\n" +
+        "  npm run prisma:generate\n" +
+        "  Restart: npm run dev\n",
+    );
+    process.exit(1);
   }
-
-  type Query {
-    admin: [User!]!
-  }
-
-  type Mutation {
-    CreateAdmin(UserName: String!, Password: String!, Role: String!, HotelName: String!, LogoUrl: String!): User!
-  }
-`;
-
-const resolvers = {
-  Query: {
-    admin: async () => {
-      return await prisma.user.findMany();
-    },
-  },
-  Mutation: {
-    CreateAdmin: async (_, { UserName, Password, Role, HotelName, LogoUrl }) => {
-      const existingUser = await prisma.user.findUnique({
-        where: { UserName: UserName, HotelName: HotelName },
-      });
-      if (existingUser) {
-        throw new Error("User already exists");
-      }
-
-      const hashedPassword = await bcrypt.hash(Password, 12);
-      return await prisma.user.create({
-        data: { UserName, Password: hashedPassword, Role, HotelName, LogoUrl },
-      });
-    },
-  },
-};
+}
 
 async function startServer() {
+  assertPrismaPricingModel();
   const app = express();
   app.use(cors());
 
   const server = new ApolloServer({
     typeDefs,
     resolvers,
+    context: ({ req }) => ({
+      apex: authenticateRequest(req),
+    }),
   });
 
   await server.start();
   server.applyMiddleware({ app, path: "/graphql" });
 
-  const port = 4000;
+  app.get("/health", (_req, res) => {
+    res.status(200).json({
+      status: "OK",
+      service: "Apex GraphQL API",
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  const port = process.env.PORT || 4000;
   app.listen(port, () => {
-    console.log(`Server ready at http://localhost:${port}/graphql`);
+    console.log(`Apex API ready at http://localhost:${port}/graphql`);
+    console.log("Prisma: run npm run prisma:generate in this folder after schema changes");
   });
 }
 
-startServer().catch((error) => {
-  console.error("Server startup error:", error);
+startServer().catch((err) => {
+  console.error("Server startup error:", err);
+  process.exit(1);
 });
