@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "build": "prisma generate && node scripts/patchPrismaClientPackage.mjs",
-    "postinstall": "prisma generate && node scripts/patchPrismaClientPackage.mjs",
-    "prisma:generate": "prisma generate && node scripts/patchPrismaClientPackage.mjs",
+    "build": "prisma generate",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
     "seed:apex": "node scripts/seedApexAdmin.js"
   },
   "keywords": [],
