@@ -9,6 +9,45 @@ datasource db {
   provider = "mysql"
 }
 
+// =============================================================================
+// OWNER MODELS (hotcol-owner mobile app)
+// -----------------------------------------------------------------------------
+// An owner is a business owner who oversees one or more properties (cafes /
+// hotels) that already exist in the shared database. Each property is keyed by
+// its tenant TIN (`user.tinNumber` / `tenant_account.tinNumber`).
+// =============================================================================
+
+/// Owner login for the hotcol-owner mobile app. Separate from tenant `user`.
+model owner_account {
+  id          Int      @id @default(autoincrement())
+  UserName    String   @unique
+  Password    String
+  displayName String?
+  phone       String?
+  email       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  properties owner_property[]
+}
+
+/// Link between an owner and a property TIN they oversee (portfolio entry).
+model owner_property {
+  id         Int      @id @default(autoincrement())
+  ownerId    Int
+  /// Matches user.tinNumber / tenant_account.tinNumber.
+  tinNumber  String
+  /// Optional owner-facing label override; falls back to the property name.
+  label      String?
+  createdAt  DateTime @default(now())
+
+  owner owner_account @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, tinNumber])
+  @@index([tinNumber])
+}
+
 model user {
   id                          Int       @id @default(autoincrement())
   UserName                    String    @unique
@@ -271,6 +310,10 @@ model Item {
   imageUrl            String
   /// When true, kitchen/bar prep summary shows aggregated quantity for this item.
   showStationPrepQty  Boolean  @default(true)
+  /// When true, the item is temporarily suspended and cannot be ordered by the cashier.
+  isSuspended         Boolean  @default(false)
+  /// Optional recipe: { ingredients: [{ name, amount, measuredBy, unitPrice }] }
+  recipeJson          Json?
   createdAt           DateTime @default(now())
 }
 
@@ -544,6 +587,8 @@ model StockOutRequest {
   movementType         String
   amount               Float
   stakeHolderOrReason  String
+  /// Calendar day chosen at store entry; applied to inactive movement when approved.
+  movementDate         DateTime?
   /// PENDING_CC | CHECKED_CC | PENDING_FINANCE | PENDING_MANAGER | APPROVED | REJECTED | legacy PENDING
   status               String
   voucherNumber        Int?
@@ -566,6 +611,28 @@ model StockOutRequest {
 
   @@index([HotelName])
   @@index([status])
+}
+
+/// Archived pricing for kitchen-received items fully stocked out (inventory row removed).
+model FreshBazaar {
+  id                 Int      @id @default(autoincrement())
+  HotelName          String
+  itemRegistrationId Int      @unique
+  stockOutRequestId  Int?
+  name               String
+  imageUrl           String   @default("")
+  category           String   @default("")
+  measuredBy         String
+  unitPrice          Float
+  purchaseWithVat    Boolean  @default(false)
+  supplierName       String
+  supplierPhone      String
+  Address            String
+  supplierTinNumber  String   @default("")
+  archivedAt         DateTime @default(now())
+
+  @@index([HotelName])
+  @@index([stockOutRequestId])
 }
 
 /// Daily chef / bar count rows (opening pulse, documented stock-out, closing on-hand).

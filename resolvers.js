@@ -131,6 +131,7 @@ export const resolvers = {
       let billingHoldTenants = 0;
       let graceOrExpiredTenants = 0;
       let trialsEndingSoon = 0;
+      let trialExpiredTenants = 0;
 
       for (const owner of owners) {
         const sub = tenantBillingRowFromOwner(owner);
@@ -138,7 +139,9 @@ export const resolvers = {
         if (status === "setup_pending") setupPendingTenants += 1;
         if (status === "on_hold" || Boolean(owner.billingHold)) billingHoldTenants += 1;
         if (status === "grace" || status === "expired") graceOrExpiredTenants += 1;
-        if (owner.freeTrialEndsAt) {
+        if (status === "trial_expired") trialExpiredTenants += 1;
+        if (status === "trial_ending") trialsEndingSoon += 1;
+        else if (owner.freeTrialEndsAt) {
           const end = new Date(owner.freeTrialEndsAt);
           if (
             !Number.isNaN(end.getTime()) &&
@@ -162,6 +165,7 @@ export const resolvers = {
         billingHoldTenants,
         graceOrExpiredTenants,
         trialsEndingSoon,
+        trialExpiredTenants,
         totalTenants: owners.length,
         totalUsers: userCounts.totalUsers,
         disabledUsers: userCounts.disabledUsers,
