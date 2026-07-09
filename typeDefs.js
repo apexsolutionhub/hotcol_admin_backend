@@ -228,6 +228,40 @@ export const typeDefs = gql`
     messages: [FeedbackMessageRow!]!
   }
 
+  type SignupPricingPreview {
+    setupFeeETB: Int!
+    quarterlyFeeETB: Int!
+    source: String!
+  }
+
+  type TenantOnboardingResult {
+    tinNumber: String!
+    hotelDisplayName: String!
+    ownerUserName: String!
+    ownerRole: String!
+    setupFeeETB: Int!
+    setupFeeApproved: Boolean!
+    userId: Int!
+  }
+
+  type TenantWithoutOwnerRow {
+    tinNumber: String!
+    hotelDisplayName: String!
+    businessType: String
+    hasStaffUsers: Boolean!
+  }
+
+  type OwnerAccountRow {
+    id: Int!
+    userName: String!
+    displayName: String
+    phone: String
+    email: String
+    isActive: Boolean!
+    propertyCount: Int!
+    createdAt: DateTime!
+  }
+
   type Query {
     apexMe: ApexTeamMember
     apexDashboardSummary: ApexDashboardSummary!
@@ -250,6 +284,9 @@ export const typeDefs = gql`
     apexFeedbackThread(threadId: Int!): FeedbackThreadDetail
     apexFeedbackTenantContext(tinNumber: String!): TenantDetail
     apexPricingRules(businessType: String): [PricingRuleRow!]!
+    apexSignupPricingPreview(businessType: String!, modules: JSON!): SignupPricingPreview!
+    apexTenantsWithoutOwner: [TenantWithoutOwnerRow!]!
+    apexOwnerAccounts(search: String): [OwnerAccountRow!]!
   }
 
   type Mutation {
@@ -294,5 +331,37 @@ export const typeDefs = gql`
     startApexChatWithTenant(tinNumber: String!, body: String!): FeedbackThreadDetail!
     markApexFeedbackRead(threadId: Int!): Boolean!
     closeFeedbackThread(threadId: Int!, reason: String): Boolean!
+    apexCreateTenant(
+      hotelName: String!
+      userName: String!
+      password: String!
+      businessType: String!
+      modules: JSON!
+      logoUrl: String
+      tinNumber: String
+      paymentChannel: String
+      paymentTransactionRef: String
+      confirmPaymentReceived: Boolean
+      isIllustrationTenant: Boolean
+      billingNotes: String
+    ): TenantOnboardingResult!
+    apexCreateTenantOwner(
+      tinNumber: String!
+      userName: String!
+      password: String!
+      logoUrl: String
+      paymentChannel: String
+      paymentTransactionRef: String
+      confirmPaymentReceived: Boolean
+    ): TenantOnboardingResult!
+    apexCreateOwnerAccount(
+      userName: String!
+      password: String!
+      displayName: String
+      phone: String
+      email: String
+      linkTinNumber: String
+    ): OwnerAccountRow!
+    apexLinkOwnerProperty(ownerAccountId: Int!, tinNumber: String!, label: String): Boolean!
   }
 `;

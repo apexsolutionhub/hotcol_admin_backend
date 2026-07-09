@@ -41,6 +41,14 @@ import {
   listTenantUsersForMonitoring,
   normalizeBusinessType,
 } from "./lib/monitoringHelpers.js";
+import {
+  createTenantOwnerUser,
+  createOwnerForExistingTenant,
+  createPortfolioOwnerAccount,
+  linkOwnerToProperty,
+  listTenantsWithoutOwner,
+  listOwnerAccounts,
+} from "./lib/tenantOnboarding.js";
 
 async function mapPaymentRow(row, hotelDisplayName) {
   return {
@@ -409,6 +417,26 @@ export const resolvers = {
       assertApex(context);
       const rows = await listPricingRules(businessType);
       return rows.map(mapPricingRuleRow);
+    },
+
+    apexSignupPricingPreview: async (_, { businessType, modules }, context) => {
+      assertApex(context);
+      const fees = await resolveSignupPricing(businessType, modules);
+      return {
+        setupFeeETB: fees.setupFeeETB,
+        quarterlyFeeETB: fees.quarterlyFeeETB,
+        source: fees.source,
+      };
+    },
+
+    apexTenantsWithoutOwner: async (_, __, context) => {
+      assertApex(context);
+      return listTenantsWithoutOwner();
+    },
+
+    apexOwnerAccounts: async (_, { search }, context) => {
+      assertApex(context);
+      return listOwnerAccounts(search);
     },
 
     apexFeedbackTenantContext: async (_, { tinNumber }, context) => {
@@ -1271,6 +1299,72 @@ export const resolvers = {
       await writeApexAudit(apex.apexMemberId, "close_feedback_thread", {
         payload: { threadId },
         reason,
+      });
+      return true;
+    },
+
+    apexCreateTenant: async (_, args, context) => {
+      const apex = assertApex(context);
+      return createTenantOwnerUser({
+        apex,
+        hotelName: args.hotelName,
+        userName: args.userName,
+        password: args.password,
+        businessType: args.businessType,
+        modules: args.modules,
+        tinNumber: args.tinNumber,
+        logoUrl: args.logoUrl,
+        paymentChannel: args.paymentChannel,
+        paymentTransactionRef: args.paymentTransactionRef,
+        confirmPaymentReceived: Boolean(args.confirmPaymentReceived),
+        isIllustrationTenant: Boolean(args.isIllustrationTenant),
+        billingNotes: args.billingNotes,
+      });
+    },
+
+    apexCreateTenantOwner: async (_, args, context) => {
+      const apex = assertApex(context);
+      return createOwnerForExistingTenant({
+        apex,
+        tinNumber: args.tinNumber,
+        userName: args.userName,
+        password: args.password,
+        logoUrl: args.logoUrl,
+        paymentChannel: args.paymentChannel,
+        paymentTransactionRef: args.paymentTransactionRef,
+        confirmPaymentReceived: Boolean(args.confirmPaymentReceived),
+      });
+    },
+
+    apexCreateOwnerAccount: async (_, args, context) => {
+      const apex = assertApex(context);
+      const owner = await createPortfolioOwnerAccount({
+        apex,
+        userName: args.userName,
+        password: args.password,
+        displayName: args.displayName,
+        phone: args.phone,
+        email: args.email,
+        linkTinNumber: args.linkTinNumber,
+      });
+      return {
+        id: owner.id,
+        userName: owner.UserName,
+        displayName: owner.displayName,
+        phone: owner.phone,
+        email: owner.email,
+        isActive: owner.isActive,
+        propertyCount: args.linkTinNumber ? 1 : 0,
+        createdAt: owner.createdAt,
+      };
+    },
+
+    apexLinkOwnerProperty: async (_, { ownerAccountId, tinNumber, label }, context) => {
+      const apex = assertApex(context);
+      await linkOwnerToProperty(ownerAccountId, tinNumber, label);
+      await writeApexAudit(apex.apexMemberId, "apex_link_owner_property", {
+        targetTinNumber: String(tinNumber).trim(),
+        payload: { ownerAccountId, label },
       });
       return true;
     },
