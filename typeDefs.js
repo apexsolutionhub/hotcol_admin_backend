@@ -324,6 +324,7 @@ export const typeDefs = gql`
       sortOrder: Int
     ): PricingRuleRow!
     setPricingRuleActive(id: Int!, isActive: Boolean!): Boolean!
+    deletePricingRule(id: Int!): Boolean!
     syncTenantStaffModules(tinNumber: String!): Boolean!
     approveModuleChangeRequest(requestId: Int!, reviewNote: String): Boolean!
     rejectModuleChangeRequest(requestId: Int!, reviewNote: String): Boolean!

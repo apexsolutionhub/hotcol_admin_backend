@@ -1062,6 +1062,18 @@ export const resolvers = {
       return true;
     },
 
+    deletePricingRule: async (_, { id }, context) => {
+      const apex = assertApex(context);
+      const ruleId = Number(id);
+      await prisma.subscription_pricing_rule.delete({
+        where: { id: ruleId },
+      });
+      await writeApexAudit(apex.apexMemberId, "delete_pricing_rule", {
+        payload: { id: ruleId },
+      });
+      return true;
+    },
+
     updateTenantModules: async (_, { tinNumber, modules, recalcFees }, context) => {
       const apex = assertApex(context);
       const tin = String(tinNumber).trim();
