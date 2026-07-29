@@ -24,6 +24,7 @@ export const typeDefs = gql`
     suspendedTenants: Int!
     bannedTenants: Int!
     setupPendingTenants: Int!
+    inactiveTenants: Int!
     billingHoldTenants: Int!
     graceOrExpiredTenants: Int!
     trialsEndingSoon: Int!
