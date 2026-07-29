@@ -586,10 +586,12 @@ export const resolvers = {
         }
 
         const thread = threadByTin.get(tin);
+        const logoUrl = account?.logoUrl ?? owner?.LogoUrl ?? null;
         if (thread) {
           rows.push({
             tinNumber: tin,
             hotelDisplayName: thread.hotelDisplayName || displayName,
+            logoUrl,
             threadId: thread.id,
             chatStatus: thread.status,
             unreadFromTenant: unreadMap.get(thread.id) ?? 0,
@@ -600,6 +602,7 @@ export const resolvers = {
           rows.push({
             tinNumber: tin,
             hotelDisplayName: displayName,
+            logoUrl,
             threadId: null,
             chatStatus: "no_thread",
             unreadFromTenant: 0,

@@ -213,6 +213,7 @@ export const typeDefs = gql`
   type FeedbackDirectoryRow {
     tinNumber: String!
     hotelDisplayName: String!
+    logoUrl: String
     threadId: Int
     chatStatus: String!
     unreadFromTenant: Int!
