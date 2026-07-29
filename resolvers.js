@@ -72,8 +72,21 @@ function mapPricingRuleRow(row) {
   };
 }
 
+async function assertTenantActiveForChat(tinNumber) {
+  const tin = String(tinNumber || "").trim();
+  const account = await prisma.tenant_account.findUnique({
+    where: { tinNumber: tin },
+    select: { accountStatus: true },
+  });
+  const status = String(account?.accountStatus || "active").toLowerCase();
+  if (status !== "active") {
+    throw new Error("Only active tenants can receive chat");
+  }
+}
+
 async function postApexOpeningMessageToTenant(apex, tinNumber, text) {
   const tin = String(tinNumber || "").trim();
+  await assertTenantActiveForChat(tin);
   let thread = await getOrCreateFeedbackThreadForTin(tin);
 
   if (thread.status === "closed") {
@@ -1369,16 +1382,6 @@ export const resolvers = {
 
       for (const tin of uniqueTins) {
         try {
-          const account = await prisma.tenant_account.findUnique({
-            where: { tinNumber: tin },
-            select: { accountStatus: true },
-          });
-          if (
-            account &&
-            String(account.accountStatus || "").toLowerCase() === "deleted"
-          ) {
-            throw new Error("Deleted tenants cannot receive chat");
-          }
           const thread = await postApexOpeningMessageToTenant(apex, tin, text);
           threadIds.push(thread.id);
         } catch (e) {
