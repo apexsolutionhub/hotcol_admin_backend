@@ -133,6 +133,23 @@ export const resolvers = {
         prisma.tenant_module_change_request.count({ where: { status: "pending" } }),
       ]);
 
+      const ownerTins = owners.map((owner) =>
+        owner.tinNumber != null && String(owner.tinNumber).trim() !== ""
+          ? String(owner.tinNumber).trim()
+          : String(owner.HotelName).trim(),
+      );
+      const accountMap = await loadTenantAccountsByTin(ownerTins);
+      const currentOwners = owners.filter((owner) => {
+        const tin =
+          owner.tinNumber != null && String(owner.tinNumber).trim() !== ""
+            ? String(owner.tinNumber).trim()
+            : String(owner.HotelName).trim();
+        const status = String(
+          accountMap.get(tin)?.accountStatus ?? "active",
+        ).toLowerCase();
+        return status !== "deleted";
+      });
+
       const now = new Date();
       const trialCutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
       let setupPendingTenants = 0;
@@ -141,7 +158,7 @@ export const resolvers = {
       let trialsEndingSoon = 0;
       let trialExpiredTenants = 0;
 
-      for (const owner of owners) {
+      for (const owner of currentOwners) {
         const sub = tenantBillingRowFromOwner(owner);
         const status = computeSubscriptionPeriodStatus(sub, now);
         if (status === "setup_pending") setupPendingTenants += 1;
@@ -174,11 +191,11 @@ export const resolvers = {
         graceOrExpiredTenants,
         trialsEndingSoon,
         trialExpiredTenants,
-        totalTenants: owners.length,
+        totalTenants: currentOwners.length,
         totalUsers: userCounts.totalUsers,
         disabledUsers: userCounts.disabledUsers,
         pendingModuleRequests,
-        tenantsByBusinessType: countTenantsByBusinessType(owners),
+        tenantsByBusinessType: countTenantsByBusinessType(currentOwners),
       };
     },
 
@@ -933,6 +950,66 @@ export const resolvers = {
         },
       });
       await writeApexAudit(apex.apexMemberId, "unban_tenant", {
+        targetTinNumber: tin,
+        reason,
+      });
+      return true;
+    },
+
+    deleteTenant: async (_, { tinNumber, reason }, context) => {
+      const apex = assertApex(context);
+      const tin = String(tinNumber).trim();
+      const owner = await findTenantOwner(tin);
+      if (!owner) throw new Error("Tenant not found");
+      const note = String(reason || "").trim();
+      if (!note) throw new Error("A deletion reason is required");
+
+      await ensureTenantAccount(tin, owner);
+      const now = new Date();
+      await prisma.tenant_account.update({
+        where: { tinNumber: tin },
+        data: {
+          accountStatus: "deleted",
+          // Reuse banned* columns as deletion metadata (status distinguishes delete vs ban).
+          bannedAt: now,
+          bannedReason: note,
+          bannedByApexMemberId: apex.apexMemberId,
+          suspendedAt: null,
+          suspendedReason: null,
+          suspendedByApexMemberId: null,
+        },
+      });
+      await writeApexAudit(apex.apexMemberId, "delete_tenant", {
+        targetTinNumber: tin,
+        reason: note,
+      });
+      return true;
+    },
+
+    restoreDeletedTenant: async (_, { tinNumber, reason }, context) => {
+      const apex = assertApex(context);
+      const tin = String(tinNumber).trim();
+      const account = await prisma.tenant_account.findUnique({
+        where: { tinNumber: tin },
+      });
+      if (!account) throw new Error("Tenant not found");
+      if (String(account.accountStatus) !== "deleted") {
+        throw new Error("Tenant is not deleted");
+      }
+
+      await prisma.tenant_account.update({
+        where: { tinNumber: tin },
+        data: {
+          accountStatus: "active",
+          bannedAt: null,
+          bannedReason: null,
+          bannedByApexMemberId: null,
+          suspendedAt: null,
+          suspendedReason: null,
+          suspendedByApexMemberId: null,
+        },
+      });
+      await writeApexAudit(apex.apexMemberId, "restore_deleted_tenant", {
         targetTinNumber: tin,
         reason,
       });

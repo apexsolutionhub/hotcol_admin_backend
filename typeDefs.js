@@ -301,6 +301,10 @@ export const typeDefs = gql`
     unsuspendTenant(tinNumber: String!, reason: String): Boolean!
     banTenant(tinNumber: String!, reason: String!): Boolean!
     unbanTenant(tinNumber: String!, reason: String): Boolean!
+    """Soft-delete: blocks all hotcol-user logins; tenant stays visible under Deleted tab."""
+    deleteTenant(tinNumber: String!, reason: String!): Boolean!
+    """Restore a soft-deleted tenant to active account status."""
+    restoreDeletedTenant(tinNumber: String!, reason: String): Boolean!
     setUserLoginDisabled(userId: Int!, disabled: Boolean!, reason: String): Boolean!
     updateTenantBilling(
       tinNumber: String!
