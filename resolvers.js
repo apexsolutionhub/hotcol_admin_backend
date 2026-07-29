@@ -72,6 +72,49 @@ function mapPricingRuleRow(row) {
   };
 }
 
+async function postApexOpeningMessageToTenant(apex, tinNumber, text) {
+  const tin = String(tinNumber || "").trim();
+  let thread = await getOrCreateFeedbackThreadForTin(tin);
+
+  if (thread.status === "closed") {
+    thread = await prisma.tenant_feedback_thread.update({
+      where: { id: thread.id },
+      data: {
+        status: "open",
+        closedAt: null,
+        closedByApexMemberId: null,
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  const member = await prisma.apex_team_member.findUnique({
+    where: { id: apex.apexMemberId },
+  });
+  await prisma.tenant_feedback_message.create({
+    data: {
+      threadId: thread.id,
+      senderSide: "apex",
+      apexMemberId: apex.apexMemberId,
+      apexDisplayName: member?.displayName || member?.UserName || "Apex",
+      body: text,
+      readByApex: true,
+      readByTenant: false,
+    },
+  });
+  thread = await prisma.tenant_feedback_thread.update({
+    where: { id: thread.id },
+    data: { updatedAt: new Date(), status: "open" },
+  });
+
+  const messages = await prisma.tenant_feedback_message.findMany({
+    where: { threadId: thread.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return { ...thread, messages };
+}
+
 async function catalogFeePatch(businessType, modules) {
   const fees = await resolveSignupPricing(businessType, modules);
   return {
@@ -1294,50 +1337,73 @@ export const resolvers = {
       const text = String(body || "").trim();
       if (!text) throw new Error("Opening message is required");
 
-      let thread = await getOrCreateFeedbackThreadForTin(tin);
-
-      if (thread.status === "closed") {
-        thread = await prisma.tenant_feedback_thread.update({
-          where: { id: thread.id },
-          data: {
-            status: "open",
-            closedAt: null,
-            closedByApexMemberId: null,
-            updatedAt: new Date(),
-          },
-        });
-      }
-
-      const member = await prisma.apex_team_member.findUnique({
-        where: { id: apex.apexMemberId },
-      });
-      await prisma.tenant_feedback_message.create({
-        data: {
-          threadId: thread.id,
-          senderSide: "apex",
-          apexMemberId: apex.apexMemberId,
-          apexDisplayName: member?.displayName || member?.UserName || "Apex",
-          body: text,
-          readByApex: true,
-          readByTenant: false,
-        },
-      });
-      thread = await prisma.tenant_feedback_thread.update({
-        where: { id: thread.id },
-        data: { updatedAt: new Date(), status: "open" },
-      });
-
-      const messages = await prisma.tenant_feedback_message.findMany({
-        where: { threadId: thread.id },
-        orderBy: { createdAt: "asc" },
-      });
-
+      const result = await postApexOpeningMessageToTenant(apex, tin, text);
       await writeApexAudit(apex.apexMemberId, "start_apex_chat", {
         targetTinNumber: tin,
-        payload: { threadId: thread.id, hasOpeningMessage: Boolean(text) },
+        payload: { threadId: result.id, hasOpeningMessage: true },
+      });
+      return result;
+    },
+
+    broadcastApexChatToTenants: async (_, { tinNumbers, body }, context) => {
+      const apex = assertApex(context);
+      const text = String(body || "").trim();
+      if (!text) throw new Error("Broadcast message is required");
+
+      const uniqueTins = [
+        ...new Set(
+          (Array.isArray(tinNumbers) ? tinNumbers : [])
+            .map((t) => String(t || "").trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (uniqueTins.length === 0) {
+        throw new Error("Select at least one property");
+      }
+      if (uniqueTins.length > 50) {
+        throw new Error("Broadcast is limited to 50 properties at once");
+      }
+
+      const threadIds = [];
+      const failures = [];
+
+      for (const tin of uniqueTins) {
+        try {
+          const account = await prisma.tenant_account.findUnique({
+            where: { tinNumber: tin },
+            select: { accountStatus: true },
+          });
+          if (
+            account &&
+            String(account.accountStatus || "").toLowerCase() === "deleted"
+          ) {
+            throw new Error("Deleted tenants cannot receive chat");
+          }
+          const thread = await postApexOpeningMessageToTenant(apex, tin, text);
+          threadIds.push(thread.id);
+        } catch (e) {
+          failures.push({
+            tinNumber: tin,
+            message: e instanceof Error ? e.message : "Failed to send",
+          });
+        }
+      }
+
+      await writeApexAudit(apex.apexMemberId, "broadcast_apex_chat", {
+        payload: {
+          sentCount: threadIds.length,
+          failedCount: failures.length,
+          tinNumbers: uniqueTins,
+          threadIds,
+        },
       });
 
-      return { ...thread, messages };
+      return {
+        sentCount: threadIds.length,
+        failedCount: failures.length,
+        threadIds,
+        failures,
+      };
     },
 
     sendApexFeedbackMessage: async (_, { threadId, body, imageUrl }, context) => {

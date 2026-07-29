@@ -229,6 +229,18 @@ export const typeDefs = gql`
     messages: [FeedbackMessageRow!]!
   }
 
+  type BroadcastChatFailure {
+    tinNumber: String!
+    message: String!
+  }
+
+  type BroadcastChatResult {
+    sentCount: Int!
+    failedCount: Int!
+    threadIds: [Int!]!
+    failures: [BroadcastChatFailure!]!
+  }
+
   type SignupPricingPreview {
     setupFeeETB: Int!
     quarterlyFeeETB: Int!
@@ -335,6 +347,8 @@ export const typeDefs = gql`
     rejectModuleChangeRequest(requestId: Int!, reviewNote: String): Boolean!
     sendApexFeedbackMessage(threadId: Int!, body: String, imageUrl: String): FeedbackMessageRow!
     startApexChatWithTenant(tinNumber: String!, body: String!): FeedbackThreadDetail!
+    """Post the same opening message into each selected property's chat thread."""
+    broadcastApexChatToTenants(tinNumbers: [String!]!, body: String!): BroadcastChatResult!
     markApexFeedbackRead(threadId: Int!): Boolean!
     closeFeedbackThread(threadId: Int!, reason: String): Boolean!
     apexCreateTenant(
