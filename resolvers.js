@@ -575,6 +575,10 @@ export const resolvers = {
             : String(owner.HotelName).trim();
         const account = accountOrOwnerFallback(accountMap.get(tin), owner, tin);
         const displayName = account?.hotelDisplayName ?? owner.HotelName ?? tin;
+        const accountStatus = String(
+          account?.accountStatus || "active",
+        ).toLowerCase();
+        if (accountStatus !== "active") continue;
 
         if (q) {
           const hay = `${displayName} ${tin} ${owner.UserName}`.toLowerCase();
