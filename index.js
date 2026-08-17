@@ -33,12 +33,27 @@ app.get("/", (_req, res) => {
 let graphqlMiddleware = null;
 let graphqlLoading = null;
 
+function firstUsefulFrame(error) {
+  const lines = String(error?.stack || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return (
+    lines.find(
+      (line) =>
+        line.startsWith("at ") &&
+        !line.includes("node:internal") &&
+        !line.includes("node:vm"),
+    ) || ""
+  );
+}
+
 function publicStartError(error) {
   const err = error instanceof Error ? error : new Error(String(error));
-  const loc = err.stack?.split("\n")[1]?.trim() || "";
   if (/DATABASE_URL is required/i.test(err.message)) {
     return "DATABASE_URL is not set on the Apex API (Vercel env). Add it on hotcol-admin-backend and redeploy.";
   }
+  const loc = firstUsefulFrame(err);
   return loc ? `${err.message} (${loc})` : err.message;
 }
 
