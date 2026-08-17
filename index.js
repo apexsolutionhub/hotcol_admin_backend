@@ -1,30 +1,6 @@
 import express from "express";
-import { ApolloServer } from "apollo-server-express";
 import cors from "cors";
 import "dotenv/config";
-import { typeDefs } from "./typeDefs.js";
-import { resolvers } from "./resolvers.js";
-import { authenticateRequest } from "./lib/apexAuth.js";
-import { prisma, prismaInitError } from "./lib/prisma.js";
-
-function prismaStartupError() {
-  if (prismaInitError) {
-    const msg = prismaInitError instanceof Error
-      ? prismaInitError.message
-      : String(prismaInitError);
-    if (/DATABASE_URL is required/i.test(msg)) {
-      return "DATABASE_URL is not set on the Apex API (Vercel env). Add it in the hotcol-admin-backend project and redeploy.";
-    }
-    return `Apex API database client failed to start: ${msg}`;
-  }
-  if (!prisma) {
-    return "Apex API database client is not initialized. Set DATABASE_URL on Vercel and redeploy hotcol-admin-backend.";
-  }
-  if (!prisma.subscription_pricing_rule?.findMany) {
-    return "Prisma client is out of date — subscription_pricing_rule is missing. Redeploy hotcol-admin-backend after prisma generate.";
-  }
-  return null;
-}
 
 const app = express();
 app.use(
@@ -37,51 +13,75 @@ app.use(
 );
 
 app.get("/health", (_req, res) => {
-  const dbError = prismaStartupError();
-  res.status(dbError ? 503 : 200).json({
-    status: dbError ? "DEGRADED" : "OK",
+  res.status(200).json({
+    status: "OK",
     service: "Apex GraphQL API",
     graphql: "/graphql",
-    database: dbError ? "error" : "ok",
-    databaseError: dbError,
     timestamp: new Date().toISOString(),
   });
 });
 
 app.get("/", (_req, res) => {
-  const dbError = prismaStartupError();
-  res.status(dbError ? 503 : 200).json({
-    status: dbError ? "DEGRADED" : "OK",
+  res.status(200).json({
+    status: "OK",
     service: "Apex GraphQL API",
     graphql: "/graphql",
     health: "/health",
-    database: dbError ? "error" : "ok",
   });
 });
 
-const dbError = prismaStartupError();
-if (dbError) {
-  console.error("[HotCol Apex API]", dbError);
-  app.use("/graphql", (_req, res) => {
-    res.status(503).json({
-      errors: [{ message: dbError }],
+let graphqlMiddleware = null;
+let graphqlLoading = null;
+
+async function loadGraphqlMiddleware() {
+  if (graphqlMiddleware) return graphqlMiddleware;
+  if (graphqlLoading) return graphqlLoading;
+
+  graphqlLoading = (async () => {
+    const { ApolloServer } = await import("apollo-server-express");
+    const { typeDefs } = await import("./typeDefs.js");
+    const { resolvers } = await import("./resolvers.js");
+    const { authenticateRequest } = await import("./lib/apexAuth.js");
+    const { loadPrisma, prismaPublicError } = await import("./lib/prisma.js");
+
+    try {
+      await loadPrisma();
+    } catch (error) {
+      throw new Error(prismaPublicError(error));
+    }
+
+    const server = new ApolloServer({
+      typeDefs,
+      resolvers,
+      context: ({ req }) => ({
+        apex: authenticateRequest(req),
+      }),
     });
+    await server.start();
+    graphqlMiddleware = server.getMiddleware({
+      path: "/",
+      bodyParserConfig: { limit: "2mb" },
+    });
+    return graphqlMiddleware;
+  })().finally(() => {
+    graphqlLoading = null;
   });
-} else {
-  const server = new ApolloServer({
-    typeDefs,
-    resolvers,
-    context: ({ req }) => ({
-      apex: authenticateRequest(req),
-    }),
-  });
-  await server.start();
-  server.applyMiddleware({
-    app,
-    path: "/graphql",
-    bodyParserConfig: { limit: "2mb" },
-  });
+
+  return graphqlLoading;
 }
+
+app.use("/graphql", (req, res, next) => {
+  loadGraphqlMiddleware()
+    .then((middleware) => middleware(req, res, next))
+    .catch((error) => {
+      const message =
+        error instanceof Error ? error.message : "Apex GraphQL failed to start";
+      console.error("[HotCol Apex API] /graphql:", message);
+      if (!res.headersSent) {
+        res.status(503).json({ errors: [{ message }] });
+      }
+    });
+});
 
 /** Required for Vercel serverless — do not call app.listen() there. */
 export default app;
