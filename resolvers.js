@@ -1481,6 +1481,8 @@ export const resolvers = {
       });
       return true;
     },
+
+    startApexChatWithTenant: async (_, { tinNumber, body }, context) => {
       const apex = assertApex(context);
       const tin = String(tinNumber || "").trim();
       if (!tin) throw new Error("TIN required");
