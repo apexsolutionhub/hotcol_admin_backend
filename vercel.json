@@ -2,9 +2,13 @@
   "version": 2,
   "buildCommand": "npm run build",
   "installCommand": "npm install",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.js" }
+  ],
   "functions": {
     "index.js": {
-      "includeFiles": "generated/prisma/**"
+      "includeFiles": "generated/prisma/**",
+      "maxDuration": 60
     }
   }
 }
