@@ -33,22 +33,31 @@ app.get("/", (_req, res) => {
 let graphqlMiddleware = null;
 let graphqlLoading = null;
 
+function publicStartError(error) {
+  const err = error instanceof Error ? error : new Error(String(error));
+  const loc = err.stack?.split("\n")[1]?.trim() || "";
+  if (/DATABASE_URL is required/i.test(err.message)) {
+    return "DATABASE_URL is not set on the Apex API (Vercel env). Add it on hotcol-admin-backend and redeploy.";
+  }
+  return loc ? `${err.message} (${loc})` : err.message;
+}
+
 async function loadGraphqlMiddleware() {
   if (graphqlMiddleware) return graphqlMiddleware;
   if (graphqlLoading) return graphqlLoading;
 
   graphqlLoading = (async () => {
-    const { ApolloServer } = await import("apollo-server-express");
-    const { typeDefs } = await import("./typeDefs.js");
-    const { resolvers } = await import("./resolvers.js");
-    const { authenticateRequest } = await import("./lib/apexAuth.js");
     const { loadPrisma, prismaPublicError } = await import("./lib/prisma.js");
-
     try {
       await loadPrisma();
     } catch (error) {
       throw new Error(prismaPublicError(error));
     }
+
+    const { ApolloServer } = await import("apollo-server-express");
+    const { typeDefs } = await import("./typeDefs.js");
+    const { resolvers } = await import("./resolvers.js");
+    const { authenticateRequest } = await import("./lib/apexAuth.js");
 
     const server = new ApolloServer({
       typeDefs,
@@ -58,8 +67,9 @@ async function loadGraphqlMiddleware() {
       }),
     });
     await server.start();
+    // Same shape as applyMiddleware({ app, path: "/graphql" }) on the tenant API.
     graphqlMiddleware = server.getMiddleware({
-      path: "/",
+      path: "/graphql",
       bodyParserConfig: { limit: "2mb" },
     });
     return graphqlMiddleware;
@@ -70,13 +80,16 @@ async function loadGraphqlMiddleware() {
   return graphqlLoading;
 }
 
-app.use("/graphql", (req, res, next) => {
+app.use((req, res, next) => {
+  const path = String(req.path || req.url || "").split("?")[0];
+  if (path !== "/graphql" && path !== "/graphql/") {
+    return next();
+  }
   loadGraphqlMiddleware()
     .then((middleware) => middleware(req, res, next))
     .catch((error) => {
-      const message =
-        error instanceof Error ? error.message : "Apex GraphQL failed to start";
-      console.error("[HotCol Apex API] /graphql:", message);
+      const message = publicStartError(error);
+      console.error("[HotCol Apex API] /graphql:", error);
       if (!res.headersSent) {
         res.status(503).json({ errors: [{ message }] });
       }
