@@ -51,14 +51,18 @@ import {
 } from "./lib/tenantOnboarding.js";
 import {
   applyCafeOrderModeChange,
+  cafeModuleSelected,
+  cafeOrderModeForModules,
   cafeOrderModeSnapshot,
   parseCafeOrderMode,
+  parseCafeOrderModeFromRequestNote,
 } from "./lib/cafeOrderMode.js";
 
-async function mapPaymentRow(row, hotelDisplayName) {
+async function mapPaymentRow(row, hotelDisplayName, cafeOrderMode = null) {
   return {
     ...row,
     hotelDisplayName: hotelDisplayName ?? null,
+    cafeOrderMode: cafeOrderMode ?? null,
   };
 }
 
@@ -427,6 +431,7 @@ export const resolvers = {
         requestedBySide: row.requestedBySide,
         requestNote: row.requestNote,
         requestedModules: row.requestedModules,
+        requestedCafeOrderMode: parseCafeOrderModeFromRequestNote(row.requestNote),
         createdAt: row.createdAt,
       }));
     },
@@ -468,11 +473,36 @@ export const resolvers = {
       });
 
       const tins = [...new Set(rows.map((r) => String(r.tinNumber).trim()))];
-      const hotelByTin = await loadOwnerHotelNamesByTin(tins);
+      const [hotelByTin, accountMap, owners] = await Promise.all([
+        loadOwnerHotelNamesByTin(tins),
+        loadTenantAccountsByTin(tins),
+        tins.length
+          ? prisma.user.findMany({
+              where: { tinNumber: { in: tins }, Role: { in: ["Admin", "Manager"] } },
+              select: { tinNumber: true, modules: true },
+              orderBy: { id: "asc" },
+            })
+          : [],
+      ]);
+      const ownerModulesByTin = new Map();
+      for (const owner of owners) {
+        const tin = String(owner.tinNumber || "").trim();
+        if (tin && !ownerModulesByTin.has(tin)) {
+          ownerModulesByTin.set(tin, parseModulesJson(owner.modules));
+        }
+      }
       return Promise.all(
-        rows.map((row) =>
-          mapPaymentRow(row, hotelByTin.get(String(row.tinNumber).trim()) ?? null),
-        ),
+        rows.map((row) => {
+          const tin = String(row.tinNumber).trim();
+          const account = accountMap.get(tin);
+          const modules =
+            ownerModulesByTin.get(tin) ?? parseModulesJson(account?.modules);
+          return mapPaymentRow(
+            row,
+            hotelByTin.get(tin) ?? null,
+            cafeOrderModeForModules(modules, account?.cafeOrderMode),
+          );
+        }),
       );
     },
 
@@ -487,7 +517,13 @@ export const resolvers = {
         take: Math.min(limit ?? 50, 100),
       });
       const hotelName = account?.hotelDisplayName ?? owner?.HotelName ?? tin;
-      return Promise.all(rows.map((row) => mapPaymentRow(row, hotelName)));
+      const cafeOrderMode = cafeOrderModeForModules(
+        parseModulesJson(owner?.modules ?? account?.modules),
+        account?.cafeOrderMode,
+      );
+      return Promise.all(
+        rows.map((row) => mapPaymentRow(row, hotelName, cafeOrderMode)),
+      );
     },
 
     apexSignupPipeline: async (_, { limit }, context) => {
@@ -495,6 +531,12 @@ export const resolvers = {
       const owners = await listDistinctTenantOwners();
       const take = Math.min(limit ?? 50, 100);
       const pipeline = [];
+      const tins = owners.map((owner) =>
+        owner.tinNumber != null && String(owner.tinNumber).trim() !== ""
+          ? String(owner.tinNumber).trim()
+          : String(owner.HotelName).trim(),
+      );
+      const accountMap = await loadTenantAccountsByTin(tins);
 
       for (const owner of owners) {
         const sub = tenantBillingRowFromOwner(owner);
@@ -507,6 +549,7 @@ export const resolvers = {
           where: { tinNumber: tin, paymentKind: "setup", status: "pending" },
           orderBy: { submittedAt: "desc" },
         });
+        const account = accountMap.get(tin);
         pipeline.push({
           tinNumber: tin,
           hotelDisplayName: owner.HotelName,
@@ -517,6 +560,10 @@ export const resolvers = {
           paymentChannel: owner.paymentChannel,
           registeredAt: owner.createdAt,
           pendingSetupPaymentId: pending?.id ?? null,
+          cafeOrderMode: cafeOrderModeForModules(
+            parseModulesJson(owner.modules),
+            account?.cafeOrderMode,
+          ),
         });
       }
 
@@ -1335,10 +1382,24 @@ export const resolvers = {
         },
       });
       await syncOwnerModulesToAllUsers(tin, list);
-      await ensureTenantAccount(tin, owner);
+      const account = await ensureTenantAccount(tin, owner);
+      const addingCafe =
+        /\[Module change:\s*add\]/i.test(String(row.requestNote || "")) &&
+        /Changed modules:.*Cafe and Restaurant/i.test(String(row.requestNote || ""));
+      const accountUpdate = { modules: list };
+      if (addingCafe && cafeModuleSelected(list)) {
+        const nextMode =
+          parseCafeOrderModeFromRequestNote(row.requestNote) || "digital";
+        accountUpdate.cafeOrderMode = nextMode;
+        accountUpdate.cafeOrderModeHistory = applyCafeOrderModeChange(
+          account.cafeOrderModeHistory,
+          nextMode,
+          now,
+        );
+      }
       await prisma.tenant_account.update({
         where: { tinNumber: tin },
-        data: { modules: list },
+        data: accountUpdate,
       });
       await prisma.tenant_module_change_request.update({
         where: { id: requestId },

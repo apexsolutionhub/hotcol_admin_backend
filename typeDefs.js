@@ -47,6 +47,7 @@ export const typeDefs = gql`
     paymentChannel: String
     registeredAt: DateTime!
     pendingSetupPaymentId: Int
+    cafeOrderMode: String
   }
 
   type BusinessTypeCount {
@@ -94,6 +95,7 @@ export const typeDefs = gql`
     requestedBySide: String!
     requestNote: String
     requestedModules: JSON
+    requestedCafeOrderMode: String
     createdAt: DateTime!
   }
 
@@ -123,6 +125,7 @@ export const typeDefs = gql`
     billingHold: Boolean!
     isIllustrationTenant: Boolean!
     unreadFeedback: Int!
+    cafeOrderMode: String
   }
 
   type TenantUserRow {
@@ -148,6 +151,7 @@ export const typeDefs = gql`
     rejectionReason: String
     quarterNumber: Int
     hotelDisplayName: String
+    cafeOrderMode: String
   }
 
   type PricingRuleRow {
