@@ -33,6 +33,7 @@ export const typeDefs = gql`
     totalUsers: Int!
     disabledUsers: Int!
     pendingModuleRequests: Int!
+    pendingOrderModeRequests: Int!
     tenantsByBusinessType: [BusinessTypeCount!]!
   }
 
@@ -93,6 +94,18 @@ export const typeDefs = gql`
     requestedBySide: String!
     requestNote: String
     requestedModules: JSON
+    createdAt: DateTime!
+  }
+
+  type OrderModeChangeRequestRow {
+    id: Int!
+    tinNumber: String!
+    hotelDisplayName: String!
+    status: String!
+    requestedBySide: String!
+    requestNote: String
+    currentMode: String!
+    requestedMode: String!
     createdAt: DateTime!
   }
 
@@ -182,6 +195,8 @@ export const typeDefs = gql`
     users: [TenantUserRow!]!
     recentPayments: [TenantPaymentRow!]!
     operationalSnapshot: TenantOperationalSnapshot!
+    cafeOrderMode: String!
+    cafeOrderModeHistory: JSON
   }
 
   type FeedbackMessageRow {
@@ -290,6 +305,7 @@ export const typeDefs = gql`
     ): [TenantUserMonitoringRow!]!
     apexAuditLogs(limit: Int, tinNumber: String): [ApexAuditLogRow!]!
     apexModuleChangeRequests(status: String, limit: Int): [ModuleChangeRequestRow!]!
+    apexOrderModeChangeRequests(status: String, limit: Int): [OrderModeChangeRequestRow!]!
     apexPendingPayments(kind: String): [TenantPaymentRow!]!
     apexTenantPaymentHistory(tinNumber: String!, limit: Int): [TenantPaymentRow!]!
     apexSignupPipeline(limit: Int): [SignupPipelineRow!]!
@@ -346,6 +362,9 @@ export const typeDefs = gql`
     syncTenantStaffModules(tinNumber: String!): Boolean!
     approveModuleChangeRequest(requestId: Int!, reviewNote: String): Boolean!
     rejectModuleChangeRequest(requestId: Int!, reviewNote: String): Boolean!
+    approveOrderModeChangeRequest(requestId: Int!, reviewNote: String): Boolean!
+    rejectOrderModeChangeRequest(requestId: Int!, reviewNote: String): Boolean!
+    updateTenantCafeOrderMode(tinNumber: String!, cafeOrderMode: String!): Boolean!
     sendApexFeedbackMessage(threadId: Int!, body: String, imageUrl: String): FeedbackMessageRow!
     startApexChatWithTenant(tinNumber: String!, body: String!): FeedbackThreadDetail!
     """Post the same opening message into each selected property's chat thread."""
@@ -365,6 +384,7 @@ export const typeDefs = gql`
       confirmPaymentReceived: Boolean
       isIllustrationTenant: Boolean
       billingNotes: String
+      cafeOrderMode: String
     ): TenantOnboardingResult!
     apexCreateTenantOwner(
       tinNumber: String!

@@ -49,6 +49,11 @@ import {
   listTenantsWithoutOwner,
   listOwnerAccounts,
 } from "./lib/tenantOnboarding.js";
+import {
+  applyCafeOrderModeChange,
+  cafeOrderModeSnapshot,
+  parseCafeOrderMode,
+} from "./lib/cafeOrderMode.js";
 
 async function mapPaymentRow(row, hotelDisplayName) {
   return {
@@ -170,6 +175,7 @@ export const resolvers = {
         owners,
         userCounts,
         pendingModuleRequests,
+        pendingOrderModeRequests,
       ] = await Promise.all([
         prisma.tenant_payment_submission.count({
           where: { paymentKind: "setup", status: "pending" },
@@ -191,6 +197,7 @@ export const resolvers = {
         listDistinctTenantOwners(),
         loadUserMonitoringCounts(),
         prisma.tenant_module_change_request.count({ where: { status: "pending" } }),
+        prisma.tenant_order_mode_change_request.count({ where: { status: "pending" } }),
       ]);
 
       const ownerTins = owners.map((owner) =>
@@ -256,6 +263,7 @@ export const resolvers = {
         totalUsers: userCounts.totalUsers,
         disabledUsers: userCounts.disabledUsers,
         pendingModuleRequests,
+        pendingOrderModeRequests,
         tenantsByBusinessType: countTenantsByBusinessType(currentOwners),
       };
     },
@@ -365,6 +373,9 @@ export const resolvers = {
           mapPaymentRow(p, account.hotelDisplayName),
         ),
         operationalSnapshot,
+        cafeOrderMode: cafeOrderModeSnapshot(account, owner.createdAt).cafeOrderMode,
+        cafeOrderModeHistory: cafeOrderModeSnapshot(account, owner.createdAt)
+          .cafeOrderModeHistory,
       };
     },
 
@@ -416,6 +427,30 @@ export const resolvers = {
         requestedBySide: row.requestedBySide,
         requestNote: row.requestNote,
         requestedModules: row.requestedModules,
+        createdAt: row.createdAt,
+      }));
+    },
+
+    apexOrderModeChangeRequests: async (_, { status, limit }, context) => {
+      assertApex(context);
+      const statusFilter = status ? String(status).trim() : "pending";
+      const where =
+        statusFilter === "all" ? {} : { status: statusFilter };
+      const rows = await prisma.tenant_order_mode_change_request.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: Math.min(limit ?? 50, 100),
+        include: { tenantAccount: { select: { hotelDisplayName: true } } },
+      });
+      return rows.map((row) => ({
+        id: row.id,
+        tinNumber: row.tinNumber,
+        hotelDisplayName: row.tenantAccount?.hotelDisplayName ?? row.tinNumber,
+        status: row.status,
+        requestedBySide: row.requestedBySide,
+        requestNote: row.requestNote,
+        currentMode: row.currentMode,
+        requestedMode: row.requestedMode,
         createdAt: row.createdAt,
       }));
     },
@@ -1350,7 +1385,102 @@ export const resolvers = {
       return true;
     },
 
-    startApexChatWithTenant: async (_, { tinNumber, body }, context) => {
+    approveOrderModeChangeRequest: async (_, { requestId, reviewNote }, context) => {
+      const apex = assertApex(context);
+      const row = await prisma.tenant_order_mode_change_request.findUnique({
+        where: { id: requestId },
+      });
+      if (!row || row.status !== "pending") {
+        throw new Error("Order mode change request not found or not pending");
+      }
+      const tin = String(row.tinNumber).trim();
+      const owner = await findTenantOwner(tin);
+      if (!owner) throw new Error("Tenant not found");
+      const nextMode = parseCafeOrderMode(row.requestedMode);
+      const now = new Date();
+      const account = await ensureTenantAccount(tin, owner);
+      const history = applyCafeOrderModeChange(
+        account.cafeOrderModeHistory,
+        nextMode,
+        now,
+      );
+      await prisma.tenant_account.update({
+        where: { tinNumber: tin },
+        data: {
+          cafeOrderMode: nextMode,
+          cafeOrderModeHistory: history,
+        },
+      });
+      await prisma.tenant_order_mode_change_request.update({
+        where: { id: requestId },
+        data: {
+          status: "approved",
+          reviewedByApexMemberId: apex.apexMemberId,
+          reviewedAt: now,
+          reviewNote: reviewNote ? String(reviewNote).trim() : null,
+        },
+      });
+      await writeApexAudit(apex.apexMemberId, "approve_order_mode_change", {
+        targetTinNumber: tin,
+        payload: { requestId, from: row.currentMode, to: nextMode },
+        reason: reviewNote,
+      });
+      return true;
+    },
+
+    rejectOrderModeChangeRequest: async (_, { requestId, reviewNote }, context) => {
+      const apex = assertApex(context);
+      const row = await prisma.tenant_order_mode_change_request.findUnique({
+        where: { id: requestId },
+      });
+      if (!row || row.status !== "pending") {
+        throw new Error("Order mode change request not found or not pending");
+      }
+      await prisma.tenant_order_mode_change_request.update({
+        where: { id: requestId },
+        data: {
+          status: "rejected",
+          reviewedByApexMemberId: apex.apexMemberId,
+          reviewedAt: new Date(),
+          reviewNote: reviewNote ? String(reviewNote).trim() : null,
+        },
+      });
+      await writeApexAudit(apex.apexMemberId, "reject_order_mode_change", {
+        targetTinNumber: row.tinNumber,
+        payload: { requestId },
+        reason: reviewNote,
+      });
+      return true;
+    },
+
+    updateTenantCafeOrderMode: async (_, { tinNumber, cafeOrderMode }, context) => {
+      const apex = assertApex(context);
+      const tin = String(tinNumber).trim();
+      const owner = await findTenantOwner(tin);
+      if (!owner) throw new Error("Tenant not found");
+      const nextMode = parseCafeOrderMode(cafeOrderMode);
+      const now = new Date();
+      const account = await ensureTenantAccount(tin, owner);
+      const current = parseCafeOrderMode(account.cafeOrderMode);
+      if (current === nextMode) return true;
+      const history = applyCafeOrderModeChange(
+        account.cafeOrderModeHistory,
+        nextMode,
+        now,
+      );
+      await prisma.tenant_account.update({
+        where: { tinNumber: tin },
+        data: {
+          cafeOrderMode: nextMode,
+          cafeOrderModeHistory: history,
+        },
+      });
+      await writeApexAudit(apex.apexMemberId, "update_cafe_order_mode", {
+        targetTinNumber: tin,
+        payload: { from: current, to: nextMode },
+      });
+      return true;
+    },
       const apex = assertApex(context);
       const tin = String(tinNumber || "").trim();
       if (!tin) throw new Error("TIN required");
@@ -1489,6 +1619,7 @@ export const resolvers = {
         confirmPaymentReceived: Boolean(args.confirmPaymentReceived),
         isIllustrationTenant: Boolean(args.isIllustrationTenant),
         billingNotes: args.billingNotes,
+        cafeOrderMode: args.cafeOrderMode,
       });
     },
 
