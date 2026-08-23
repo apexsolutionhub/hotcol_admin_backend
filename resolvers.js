@@ -50,6 +50,12 @@ import {
   listOwnerAccounts,
 } from "./lib/tenantOnboarding.js";
 import {
+  listSalesAgents,
+  mapSalesAgentRow,
+  resolveActiveSalesAgentId,
+  salesAgentNameFromAccount,
+} from "./lib/salesAgents.js";
+import {
   applyCafeOrderModeChange,
   cafeModuleSelected,
   cafeOrderModeForModules,
@@ -58,11 +64,13 @@ import {
   parseCafeOrderModeFromRequestNote,
 } from "./lib/cafeOrderMode.js";
 
-async function mapPaymentRow(row, hotelDisplayName, cafeOrderMode = null) {
+async function mapPaymentRow(row, hotelDisplayName, cafeOrderMode = null, salesAgentName = null) {
   return {
     ...row,
     hotelDisplayName: hotelDisplayName ?? null,
     cafeOrderMode: cafeOrderMode ?? null,
+    salesAgentId: row.salesAgentId ?? null,
+    salesAgentName: salesAgentName ?? null,
   };
 }
 
@@ -327,7 +335,11 @@ export const resolvers = {
       const owner = await findTenantOwner(tin);
       if (!owner) throw new Error("Tenant not found");
 
-      const account = await ensureTenantAccount(tin, owner);
+      await ensureTenantAccount(tin, owner);
+      const account = await prisma.tenant_account.findUnique({
+        where: { tinNumber: tin },
+        include: { salesAgent: { select: { id: true, displayName: true } } },
+      });
       const sub = tenantBillingRowFromOwner(owner);
       const users = await tenantUsersForTin(tin);
       const recentPayments = await prisma.tenant_payment_submission.findMany({
@@ -374,12 +386,19 @@ export const resolvers = {
         bannedReason: account.bannedReason,
         users,
         recentPayments: recentPayments.map((p) =>
-          mapPaymentRow(p, account.hotelDisplayName),
+          mapPaymentRow(
+            p,
+            account.hotelDisplayName,
+            null,
+            salesAgentNameFromAccount(account),
+          ),
         ),
         operationalSnapshot,
         cafeOrderMode: cafeOrderModeSnapshot(account, owner.createdAt).cafeOrderMode,
         cafeOrderModeHistory: cafeOrderModeSnapshot(account, owner.createdAt)
           .cafeOrderModeHistory,
+        salesAgentId: account.salesAgentId ?? null,
+        salesAgentName: salesAgentNameFromAccount(account),
       };
     },
 
@@ -501,6 +520,7 @@ export const resolvers = {
             row,
             hotelByTin.get(tin) ?? null,
             cafeOrderModeForModules(modules, account?.cafeOrderMode),
+            salesAgentNameFromAccount(account),
           );
         }),
       );
@@ -511,18 +531,34 @@ export const resolvers = {
       const tin = String(tinNumber).trim();
       const owner = await findTenantOwner(tin);
       const account = owner ? await ensureTenantAccount(tin, owner) : null;
+      const accountWithAgent =
+        account?.salesAgentId != null
+          ? await prisma.tenant_account.findUnique({
+              where: { tinNumber: tin },
+              include: {
+                salesAgent: { select: { id: true, displayName: true } },
+              },
+            })
+          : account;
       const rows = await prisma.tenant_payment_submission.findMany({
         where: { tinNumber: tin },
         orderBy: { submittedAt: "desc" },
         take: Math.min(limit ?? 50, 100),
       });
-      const hotelName = account?.hotelDisplayName ?? owner?.HotelName ?? tin;
+      const hotelName = accountWithAgent?.hotelDisplayName ?? owner?.HotelName ?? tin;
       const cafeOrderMode = cafeOrderModeForModules(
-        parseModulesJson(owner?.modules ?? account?.modules),
-        account?.cafeOrderMode,
+        parseModulesJson(owner?.modules ?? accountWithAgent?.modules),
+        accountWithAgent?.cafeOrderMode,
       );
       return Promise.all(
-        rows.map((row) => mapPaymentRow(row, hotelName, cafeOrderMode)),
+        rows.map((row) =>
+          mapPaymentRow(
+            row,
+            hotelName,
+            cafeOrderMode,
+            salesAgentNameFromAccount(accountWithAgent),
+          ),
+        ),
       );
     },
 
@@ -564,6 +600,8 @@ export const resolvers = {
             parseModulesJson(owner.modules),
             account?.cafeOrderMode,
           ),
+          salesAgentId: account?.salesAgentId ?? null,
+          salesAgentName: salesAgentNameFromAccount(account),
         });
       }
 
@@ -597,6 +635,17 @@ export const resolvers = {
     apexOwnerAccounts: async (_, { search }, context) => {
       assertApex(context);
       return listOwnerAccounts(search);
+    },
+
+    apexSalesAgents: async (_, { activeOnly }, context) => {
+      assertApex(context);
+      return listSalesAgents({ activeOnly: Boolean(activeOnly) });
+    },
+
+    salesAgents: async (_, { activeOnly }) => {
+      return listSalesAgents({
+        activeOnly: activeOnly == null ? true : Boolean(activeOnly),
+      });
     },
 
     apexFeedbackTenantContext: async (_, { tinNumber }, context) => {
@@ -1683,6 +1732,7 @@ export const resolvers = {
         isIllustrationTenant: Boolean(args.isIllustrationTenant),
         billingNotes: args.billingNotes,
         cafeOrderMode: args.cafeOrderMode,
+        salesAgentId: args.salesAgentId ?? null,
       });
     },
 
@@ -1729,6 +1779,70 @@ export const resolvers = {
       await writeApexAudit(apex.apexMemberId, "apex_link_owner_property", {
         targetTinNumber: String(tinNumber).trim(),
         payload: { ownerAccountId, label },
+      });
+      return true;
+    },
+
+    upsertSalesAgent: async (_, args, context) => {
+      const apex = assertApex(context);
+      const displayName = String(args.displayName || "").trim();
+      if (!displayName) throw new Error("Sales agent name is required");
+      const phone =
+        args.phone != null && String(args.phone).trim() !== ""
+          ? String(args.phone).trim()
+          : null;
+      const email =
+        args.email != null && String(args.email).trim() !== ""
+          ? String(args.email).trim()
+          : null;
+      const city =
+        args.city != null && String(args.city).trim() !== ""
+          ? String(args.city).trim()
+          : null;
+      const notes =
+        args.notes != null && String(args.notes).trim() !== ""
+          ? String(args.notes).trim()
+          : null;
+      const isActive = args.isActive == null ? true : Boolean(args.isActive);
+      const payload = { displayName, phone, email, city, notes, isActive };
+
+      let row;
+      if (args.id != null) {
+        row = await prisma.sales_agent.update({
+          where: { id: Number(args.id) },
+          data: payload,
+          include: { _count: { select: { tenants: true } } },
+        });
+      } else {
+        row = await prisma.sales_agent.create({
+          data: payload,
+          include: { _count: { select: { tenants: true } } },
+        });
+      }
+
+      await writeApexAudit(apex.apexMemberId, "upsert_sales_agent", {
+        payload: { id: row.id, displayName, isActive },
+      });
+      return mapSalesAgentRow(row, row._count?.tenants);
+    },
+
+    setSalesAgentActive: async (_, { id, isActive }, context) => {
+      const apex = assertApex(context);
+      await prisma.sales_agent.update({
+        where: { id: Number(id) },
+        data: { isActive: Boolean(isActive) },
+      });
+      await writeApexAudit(apex.apexMemberId, "set_sales_agent_active", {
+        payload: { id, isActive: Boolean(isActive) },
+      });
+      return true;
+    },
+
+    deleteSalesAgent: async (_, { id }, context) => {
+      const apex = assertApex(context);
+      await prisma.sales_agent.delete({ where: { id: Number(id) } });
+      await writeApexAudit(apex.apexMemberId, "delete_sales_agent", {
+        payload: { id },
       });
       return true;
     },

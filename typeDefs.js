@@ -11,6 +11,18 @@ export const typeDefs = gql`
     role: String!
   }
 
+  type SalesAgent {
+    id: Int!
+    displayName: String!
+    phone: String
+    email: String
+    city: String
+    notes: String
+    isActive: Boolean!
+    createdAt: DateTime!
+    tenantCount: Int!
+  }
+
   type ApexAuthPayload {
     token: String!
     member: ApexTeamMember!
@@ -48,6 +60,8 @@ export const typeDefs = gql`
     registeredAt: DateTime!
     pendingSetupPaymentId: Int
     cafeOrderMode: String
+    salesAgentId: Int
+    salesAgentName: String
   }
 
   type BusinessTypeCount {
@@ -126,6 +140,8 @@ export const typeDefs = gql`
     isIllustrationTenant: Boolean!
     unreadFeedback: Int!
     cafeOrderMode: String
+    salesAgentId: Int
+    salesAgentName: String
   }
 
   type TenantUserRow {
@@ -152,6 +168,8 @@ export const typeDefs = gql`
     quarterNumber: Int
     hotelDisplayName: String
     cafeOrderMode: String
+    salesAgentId: Int
+    salesAgentName: String
   }
 
   type PricingRuleRow {
@@ -201,6 +219,8 @@ export const typeDefs = gql`
     operationalSnapshot: TenantOperationalSnapshot!
     cafeOrderMode: String!
     cafeOrderModeHistory: JSON
+    salesAgentId: Int
+    salesAgentName: String
   }
 
   type FeedbackMessageRow {
@@ -321,6 +341,8 @@ export const typeDefs = gql`
     apexSignupPricingPreview(businessType: String!, modules: JSON!): SignupPricingPreview!
     apexTenantsWithoutOwner: [TenantWithoutOwnerRow!]!
     apexOwnerAccounts(search: String): [OwnerAccountRow!]!
+    apexSalesAgents(activeOnly: Boolean): [SalesAgent!]!
+    salesAgents(activeOnly: Boolean): [SalesAgent!]!
   }
 
   type Mutation {
@@ -389,6 +411,7 @@ export const typeDefs = gql`
       isIllustrationTenant: Boolean
       billingNotes: String
       cafeOrderMode: String
+      salesAgentId: Int
     ): TenantOnboardingResult!
     apexCreateTenantOwner(
       tinNumber: String!
@@ -408,5 +431,16 @@ export const typeDefs = gql`
       linkTinNumber: String
     ): OwnerAccountRow!
     apexLinkOwnerProperty(ownerAccountId: Int!, tinNumber: String!, label: String): Boolean!
+    upsertSalesAgent(
+      id: Int
+      displayName: String!
+      phone: String
+      email: String
+      city: String
+      notes: String
+      isActive: Boolean
+    ): SalesAgent!
+    setSalesAgentActive(id: Int!, isActive: Boolean!): Boolean!
+    deleteSalesAgent(id: Int!): Boolean!
   }
 `;
