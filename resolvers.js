@@ -55,6 +55,7 @@ import {
   resolveActiveSalesAgentId,
   salesAgentNameFromAccount,
 } from "./lib/salesAgents.js";
+import { apexImportTenantExcel } from "./lib/apexExcelImport.js";
 import {
   applyCafeOrderModeChange,
   cafeModuleSelected,
@@ -1845,6 +1846,21 @@ export const resolvers = {
         payload: { id },
       });
       return true;
+    },
+
+    apexImportTenantExcel: async (_, { tinNumber, kind, rows }, context) => {
+      const apex = assertApex(context);
+      const result = await apexImportTenantExcel({ tinNumber, kind, rows });
+      await writeApexAudit(apex.apexMemberId, "apex_import_tenant_excel", {
+        targetTinNumber: String(tinNumber).trim(),
+        payload: {
+          kind,
+          importedCount: result.importedCount,
+          skippedCount: result.skippedCount,
+          errorCount: result.errors.length,
+        },
+      });
+      return result;
     },
   },
 };

@@ -297,6 +297,18 @@ export const typeDefs = gql`
     userId: Int!
   }
 
+  type ApexExcelImportRowError {
+    row: Int!
+    message: String!
+  }
+
+  type ApexExcelImportResult {
+    importedCount: Int!
+    skippedCount: Int!
+    message: String
+    errors: [ApexExcelImportRowError!]!
+  }
+
   type TenantWithoutOwnerRow {
     tinNumber: String!
     hotelDisplayName: String!
@@ -442,5 +454,11 @@ export const typeDefs = gql`
     ): SalesAgent!
     setSalesAgentActive(id: Int!, isActive: Boolean!): Boolean!
     deleteSalesAgent(id: Int!): Boolean!
+    """Bulk seed inventory rows from Apex Excel onboarding import."""
+    apexImportTenantExcel(
+      tinNumber: String!
+      kind: String!
+      rows: JSON!
+    ): ApexExcelImportResult!
   }
 `;

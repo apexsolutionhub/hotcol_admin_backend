@@ -85,7 +85,7 @@ async function loadGraphqlMiddleware() {
     // Same shape as applyMiddleware({ app, path: "/graphql" }) on the tenant API.
     graphqlMiddleware = server.getMiddleware({
       path: "/graphql",
-      bodyParserConfig: { limit: "2mb" },
+      bodyParserConfig: { limit: "12mb" },
     });
     return graphqlMiddleware;
   })().finally(() => {
