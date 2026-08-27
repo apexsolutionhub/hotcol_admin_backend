@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "build": "prisma generate",
-    "postinstall": "prisma generate",
+    "build": "node scripts/prisma-postinstall.mjs",
+    "postinstall": "node scripts/prisma-postinstall.mjs",
     "prisma:generate": "prisma generate",
     "prisma:bundle": "prisma generate && node scripts/compile-prisma.mjs",
     "seed:apex": "node scripts/seedApexAdmin.js"
