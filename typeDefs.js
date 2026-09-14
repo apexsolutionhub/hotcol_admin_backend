@@ -23,6 +23,17 @@ export const typeDefs = gql`
     tenantCount: Int!
   }
 
+  """Global crystal catalog row: Amharic|Romanized|English."""
+  type CrystalName {
+    id: Int!
+    amharic: String!
+    romanized: String!
+    english: String!
+    crystalLabel: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
   type ApexAuthPayload {
     token: String!
     member: ApexTeamMember!
@@ -355,6 +366,8 @@ export const typeDefs = gql`
     apexOwnerAccounts(search: String): [OwnerAccountRow!]!
     apexSalesAgents(activeOnly: Boolean): [SalesAgent!]!
     salesAgents(activeOnly: Boolean): [SalesAgent!]!
+    """List crystal names (optional search across amharic / romanized / english)."""
+    apexCrystalNames(search: String, take: Int, skip: Int): [CrystalName!]!
   }
 
   type Mutation {
@@ -454,6 +467,13 @@ export const typeDefs = gql`
     ): SalesAgent!
     setSalesAgentActive(id: Int!, isActive: Boolean!): Boolean!
     deleteSalesAgent(id: Int!): Boolean!
+    upsertCrystalName(
+      id: Int
+      amharic: String!
+      romanized: String!
+      english: String!
+    ): CrystalName!
+    deleteCrystalName(id: Int!): Boolean!
     """Bulk seed inventory rows from Apex Excel onboarding import."""
     apexImportTenantExcel(
       tinNumber: String!

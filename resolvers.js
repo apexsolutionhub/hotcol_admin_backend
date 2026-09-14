@@ -55,6 +55,11 @@ import {
   resolveActiveSalesAgentId,
   salesAgentNameFromAccount,
 } from "./lib/salesAgents.js";
+import {
+  deleteCrystalNameRow,
+  listCrystalNames,
+  upsertCrystalNameRow,
+} from "./lib/crystalNames.js";
 import { apexImportTenantExcel } from "./lib/apexExcelImport.js";
 import {
   applyCafeOrderModeChange,
@@ -647,6 +652,11 @@ export const resolvers = {
       return listSalesAgents({
         activeOnly: activeOnly == null ? true : Boolean(activeOnly),
       });
+    },
+
+    apexCrystalNames: async (_, { search, take, skip }, context) => {
+      assertApex(context);
+      return listCrystalNames(prisma, { search, take, skip });
     },
 
     apexFeedbackTenantContext: async (_, { tinNumber }, context) => {
@@ -1843,6 +1853,28 @@ export const resolvers = {
       const apex = assertApex(context);
       await prisma.sales_agent.delete({ where: { id: Number(id) } });
       await writeApexAudit(apex.apexMemberId, "delete_sales_agent", {
+        payload: { id },
+      });
+      return true;
+    },
+
+    upsertCrystalName: async (_, args, context) => {
+      const apex = assertApex(context);
+      const row = await upsertCrystalNameRow(prisma, args);
+      await writeApexAudit(apex.apexMemberId, "upsert_crystal_name", {
+        payload: {
+          id: row.id,
+          crystalLabel: row.crystalLabel,
+          created: args.id == null,
+        },
+      });
+      return row;
+    },
+
+    deleteCrystalName: async (_, { id }, context) => {
+      const apex = assertApex(context);
+      await deleteCrystalNameRow(prisma, id);
+      await writeApexAudit(apex.apexMemberId, "delete_crystal_name", {
         payload: { id },
       });
       return true;
