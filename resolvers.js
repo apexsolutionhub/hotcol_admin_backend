@@ -56,8 +56,12 @@ import {
   salesAgentNameFromAccount,
 } from "./lib/salesAgents.js";
 import {
+  approveCrystalNameProposalRow,
   deleteCrystalNameRow,
+  listCrystalNameProposals,
   listCrystalNames,
+  mergeCrystalNameProposalRow,
+  rejectCrystalNameProposalRow,
   upsertCrystalNameRow,
 } from "./lib/crystalNames.js";
 import { apexImportTenantExcel } from "./lib/apexExcelImport.js";
@@ -657,6 +661,11 @@ export const resolvers = {
     apexCrystalNames: async (_, { search, take, skip }, context) => {
       assertApex(context);
       return listCrystalNames(prisma, { search, take, skip });
+    },
+
+    apexCrystalNameProposals: async (_, { status, take }, context) => {
+      assertApex(context);
+      return listCrystalNameProposals(prisma, { status, take });
     },
 
     apexFeedbackTenantContext: async (_, { tinNumber }, context) => {
@@ -1878,6 +1887,61 @@ export const resolvers = {
         payload: { id },
       });
       return true;
+    },
+
+    approveCrystalNameProposal: async (_, { id }, context) => {
+      const apex = assertApex(context);
+      const reviewedBy =
+        String(apex.UserName || apex.displayName || apex.apexMemberId || "").trim() ||
+        String(apex.apexMemberId);
+      const result = await approveCrystalNameProposalRow(prisma, {
+        id,
+        reviewedBy,
+      });
+      await writeApexAudit(apex.apexMemberId, "approve_crystal_name_proposal", {
+        payload: {
+          proposalId: id,
+          crystalId: result.crystal?.id,
+          crystalLabel: result.crystal?.crystalLabel,
+        },
+      });
+      return result;
+    },
+
+    mergeCrystalNameProposal: async (_, { id, targetCrystalNameId }, context) => {
+      const apex = assertApex(context);
+      const reviewedBy =
+        String(apex.UserName || apex.displayName || apex.apexMemberId || "").trim() ||
+        String(apex.apexMemberId);
+      const result = await mergeCrystalNameProposalRow(prisma, {
+        id,
+        targetCrystalNameId,
+        reviewedBy,
+      });
+      await writeApexAudit(apex.apexMemberId, "merge_crystal_name_proposal", {
+        payload: {
+          proposalId: id,
+          targetCrystalNameId,
+          crystalLabel: result.crystal?.crystalLabel,
+        },
+      });
+      return result;
+    },
+
+    rejectCrystalNameProposal: async (_, { id, reason }, context) => {
+      const apex = assertApex(context);
+      const reviewedBy =
+        String(apex.UserName || apex.displayName || apex.apexMemberId || "").trim() ||
+        String(apex.apexMemberId);
+      const proposal = await rejectCrystalNameProposalRow(prisma, {
+        id,
+        reason,
+        reviewedBy,
+      });
+      await writeApexAudit(apex.apexMemberId, "reject_crystal_name_proposal", {
+        payload: { proposalId: id, reason },
+      });
+      return proposal;
     },
 
     apexImportTenantExcel: async (_, { tinNumber, kind, rows }, context) => {

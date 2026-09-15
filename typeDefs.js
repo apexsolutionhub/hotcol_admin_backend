@@ -34,6 +34,32 @@ export const typeDefs = gql`
     updatedAt: DateTime!
   }
 
+  """Tenant-proposed crystal awaiting Apex review."""
+  type CrystalNameProposal {
+    id: Int!
+    rawText: String!
+    amharic: String!
+    romanized: String!
+    english: String!
+    crystalLabel: String!
+    status: String!
+    source: String!
+    HotelName: String
+    tinNumber: String
+    proposedBy: String
+    mergedIntoId: Int
+    reviewNote: String
+    reviewedBy: String
+    reviewedAt: DateTime
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type CrystalNameProposalReviewResult {
+    proposal: CrystalNameProposal!
+    crystal: CrystalName
+  }
+
   type ApexAuthPayload {
     token: String!
     member: ApexTeamMember!
@@ -368,6 +394,8 @@ export const typeDefs = gql`
     salesAgents(activeOnly: Boolean): [SalesAgent!]!
     """List crystal names (optional search across amharic / romanized / english)."""
     apexCrystalNames(search: String, take: Int, skip: Int): [CrystalName!]!
+    """Pending (or filtered) crystal proposals from properties."""
+    apexCrystalNameProposals(status: String, take: Int): [CrystalNameProposal!]!
   }
 
   type Mutation {
@@ -474,6 +502,9 @@ export const typeDefs = gql`
       english: String!
     ): CrystalName!
     deleteCrystalName(id: Int!): Boolean!
+    approveCrystalNameProposal(id: Int!): CrystalNameProposalReviewResult!
+    mergeCrystalNameProposal(id: Int!, targetCrystalNameId: Int!): CrystalNameProposalReviewResult!
+    rejectCrystalNameProposal(id: Int!, reason: String): CrystalNameProposal!
     """Bulk seed inventory rows from Apex Excel onboarding import."""
     apexImportTenantExcel(
       tinNumber: String!

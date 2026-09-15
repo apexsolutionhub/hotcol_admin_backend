@@ -1481,3 +1481,33 @@ model CrystalName {
   @@index([english])
   @@map("crystal_name")
 }
+
+/// Tenant-proposed crystal names awaiting Apex review (Phase 1 — no AI yet).
+/// Staff can use the proposed label immediately; Apex merges or approves as new.
+model CrystalNameProposal {
+  id           Int      @id @default(autoincrement())
+  /// Original typed / free text from the property
+  rawText      String   @db.VarChar(512)
+  amharic      String   @db.VarChar(255)
+  romanized    String   @db.VarChar(255)
+  english      String   @db.VarChar(255)
+  /// pending | approved | merged | rejected
+  status       String   @default("pending") @db.VarChar(32)
+  /// registration | purchase | recipe | other
+  source       String   @default("other") @db.VarChar(64)
+  HotelName    String?  @db.VarChar(255)
+  tinNumber    String?  @db.VarChar(64)
+  proposedBy   String?  @db.VarChar(255)
+  /// Set when merged into an existing CrystalName.id
+  mergedIntoId Int?
+  reviewNote   String?  @db.VarChar(512)
+  reviewedBy   String?  @db.VarChar(255)
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([amharic, romanized, english])
+  @@index([tinNumber])
+  @@map("crystal_name_proposal")
+}
