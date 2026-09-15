@@ -407,6 +407,7 @@ export const resolvers = {
         cafeOrderMode: cafeOrderModeSnapshot(account, owner.createdAt).cafeOrderMode,
         cafeOrderModeHistory: cafeOrderModeSnapshot(account, owner.createdAt)
           .cafeOrderModeHistory,
+        waiterOrderingEnabled: Boolean(account?.waiterOrderingEnabled),
         salesAgentId: account.salesAgentId ?? null,
         salesAgentName: salesAgentNameFromAccount(account),
       };
@@ -1392,9 +1393,13 @@ export const resolvers = {
       });
       await syncOwnerModulesToAllUsers(tin, list);
       await ensureTenantAccount(tin, owner);
+      const accountPatch = { modules: list };
+      if (!cafeModuleSelected(list)) {
+        accountPatch.waiterOrderingEnabled = false;
+      }
       await prisma.tenant_account.update({
         where: { tinNumber: tin },
-        data: { modules: list },
+        data: accountPatch,
       });
 
       const fees = await resolveSignupPricing(owner.businessType, list);
@@ -1608,6 +1613,31 @@ export const resolvers = {
       await writeApexAudit(apex.apexMemberId, "update_cafe_order_mode", {
         targetTinNumber: tin,
         payload: { from: current, to: nextMode },
+      });
+      return true;
+    },
+
+    setTenantWaiterOrderingEnabled: async (_, { tinNumber, enabled }, context) => {
+      const apex = assertApex(context);
+      const tin = String(tinNumber).trim();
+      const owner = await findTenantOwner(tin);
+      if (!owner) throw new Error("Tenant not found");
+      const account = await ensureTenantAccount(tin, owner);
+      const modules = parseModulesJson(account.modules ?? owner.modules);
+      if (enabled && !cafeModuleSelected(modules)) {
+        throw new Error(
+          "Waiter ordering requires the Café and Restaurant module",
+        );
+      }
+      const next = Boolean(enabled);
+      if (Boolean(account.waiterOrderingEnabled) === next) return true;
+      await prisma.tenant_account.update({
+        where: { tinNumber: tin },
+        data: { waiterOrderingEnabled: next },
+      });
+      await writeApexAudit(apex.apexMemberId, "set_waiter_ordering_enabled", {
+        targetTinNumber: tin,
+        payload: { enabled: next },
       });
       return true;
     },

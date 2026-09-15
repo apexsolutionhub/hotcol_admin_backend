@@ -256,6 +256,8 @@ export const typeDefs = gql`
     operationalSnapshot: TenantOperationalSnapshot!
     cafeOrderMode: String!
     cafeOrderModeHistory: JSON
+    /// Apex permit: HotCol Waiter ordering for Café and Restaurant properties.
+    waiterOrderingEnabled: Boolean!
     salesAgentId: Int
     salesAgentName: String
   }
@@ -444,6 +446,8 @@ export const typeDefs = gql`
     approveOrderModeChangeRequest(requestId: Int!, reviewNote: String): Boolean!
     rejectOrderModeChangeRequest(requestId: Int!, reviewNote: String): Boolean!
     updateTenantCafeOrderMode(tinNumber: String!, cafeOrderMode: String!): Boolean!
+    """Apex-only: permit HotCol Waiter ordering for a Café and Restaurant property."""
+    setTenantWaiterOrderingEnabled(tinNumber: String!, enabled: Boolean!): Boolean!
     sendApexFeedbackMessage(threadId: Int!, body: String, imageUrl: String): FeedbackMessageRow!
     startApexChatWithTenant(tinNumber: String!, body: String!): FeedbackThreadDetail!
     """Post the same opening message into each selected property's chat thread."""
