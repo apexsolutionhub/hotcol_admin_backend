@@ -256,7 +256,7 @@ export const typeDefs = gql`
     operationalSnapshot: TenantOperationalSnapshot!
     cafeOrderMode: String!
     cafeOrderModeHistory: JSON
-    /// Apex permit: HotCol Waiter ordering for Café and Restaurant properties.
+    """Apex permit: HotCol Waiter ordering for Café and Restaurant properties."""
     waiterOrderingEnabled: Boolean!
     salesAgentId: Int
     salesAgentName: String
