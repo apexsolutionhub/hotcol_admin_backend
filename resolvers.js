@@ -1889,7 +1889,7 @@ export const resolvers = {
       return true;
     },
 
-    approveCrystalNameProposal: async (_, { id }, context) => {
+    approveCrystalNameProposal: async (_, { id, amharic, romanized, english }, context) => {
       const apex = assertApex(context);
       const reviewedBy =
         String(apex.UserName || apex.displayName || apex.apexMemberId || "").trim() ||
@@ -1897,6 +1897,9 @@ export const resolvers = {
       const result = await approveCrystalNameProposalRow(prisma, {
         id,
         reviewedBy,
+        amharic,
+        romanized,
+        english,
       });
       await writeApexAudit(apex.apexMemberId, "approve_crystal_name_proposal", {
         payload: {

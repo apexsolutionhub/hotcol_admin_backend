@@ -502,7 +502,7 @@ export const typeDefs = gql`
       english: String!
     ): CrystalName!
     deleteCrystalName(id: Int!): Boolean!
-    approveCrystalNameProposal(id: Int!): CrystalNameProposalReviewResult!
+    approveCrystalNameProposal(id: Int!, amharic: String, romanized: String, english: String): CrystalNameProposalReviewResult!
     mergeCrystalNameProposal(id: Int!, targetCrystalNameId: Int!): CrystalNameProposalReviewResult!
     rejectCrystalNameProposal(id: Int!, reason: String): CrystalNameProposal!
     """Bulk seed inventory rows from Apex Excel onboarding import."""
