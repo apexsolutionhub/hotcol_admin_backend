@@ -62,6 +62,7 @@ import {
   listCrystalNames,
   mergeCrystalNameProposalRow,
   rejectCrystalNameProposalRow,
+  repairCrystalNamePropagations,
   upsertCrystalNameRow,
 } from "./lib/crystalNames.js";
 import { apexImportTenantExcel } from "./lib/apexExcelImport.js";
@@ -1975,6 +1976,15 @@ export const resolvers = {
         payload: { proposalId: id, reason },
       });
       return proposal;
+    },
+
+    repairCrystalNamePropagations: async (_, { take }, context) => {
+      const apex = assertApex(context);
+      const result = await repairCrystalNamePropagations(prisma, { take });
+      await writeApexAudit(apex.apexMemberId, "repair_crystal_name_propagations", {
+        payload: result,
+      });
+      return result;
     },
 
     apexImportTenantExcel: async (_, { tinNumber, kind, rows }, context) => {

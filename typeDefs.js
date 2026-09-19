@@ -60,6 +60,11 @@ export const typeDefs = gql`
     crystal: CrystalName
   }
 
+  type CrystalNameRewriteRepairResult {
+    processed: Int!
+    updated: Int!
+  }
+
   type ApexAuthPayload {
     token: String!
     member: ApexTeamMember!
@@ -509,6 +514,8 @@ export const typeDefs = gql`
     approveCrystalNameProposal(id: Int!, amharic: String, romanized: String, english: String): CrystalNameProposalReviewResult!
     mergeCrystalNameProposal(id: Int!, targetCrystalNameId: Int!): CrystalNameProposalReviewResult!
     rejectCrystalNameProposal(id: Int!, reason: String): CrystalNameProposal!
+    """Re-apply approved/merged crystal labels onto inventory & request rows (fixes missed rewrites)."""
+    repairCrystalNamePropagations(take: Int): CrystalNameRewriteRepairResult!
     """Bulk seed inventory rows from Apex Excel onboarding import."""
     apexImportTenantExcel(
       tinNumber: String!
