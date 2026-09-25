@@ -409,6 +409,8 @@ export const resolvers = {
         cafeOrderModeHistory: cafeOrderModeSnapshot(account, owner.createdAt)
           .cafeOrderModeHistory,
         waiterOrderingEnabled: Boolean(account?.waiterOrderingEnabled),
+        hrSoloManagerEnabled: Boolean(account?.hrSoloManagerEnabled),
+        hrBiometricsEnabled: Boolean(account?.hrBiometricsEnabled),
         salesAgentId: account.salesAgentId ?? null,
         salesAgentName: salesAgentNameFromAccount(account),
       };
@@ -1398,6 +1400,10 @@ export const resolvers = {
       if (!cafeModuleSelected(list)) {
         accountPatch.waiterOrderingEnabled = false;
       }
+      if (!list.includes("HR Module")) {
+        accountPatch.hrSoloManagerEnabled = false;
+        accountPatch.hrBiometricsEnabled = false;
+      }
       await prisma.tenant_account.update({
         where: { tinNumber: tin },
         data: accountPatch,
@@ -1637,6 +1643,52 @@ export const resolvers = {
         data: { waiterOrderingEnabled: next },
       });
       await writeApexAudit(apex.apexMemberId, "set_waiter_ordering_enabled", {
+        targetTinNumber: tin,
+        payload: { enabled: next },
+      });
+      return true;
+    },
+
+    setTenantHrSoloManagerEnabled: async (_, { tinNumber, enabled }, context) => {
+      const apex = assertApex(context);
+      const tin = String(tinNumber).trim();
+      const owner = await findTenantOwner(tin);
+      if (!owner) throw new Error("Tenant not found");
+      const account = await ensureTenantAccount(tin, owner);
+      const modules = parseModulesJson(account.modules ?? owner.modules);
+      if (enabled && !modules.includes("HR Module")) {
+        throw new Error("Solo HR Manager requires the HR Module");
+      }
+      const next = Boolean(enabled);
+      if (Boolean(account.hrSoloManagerEnabled) === next) return true;
+      await prisma.tenant_account.update({
+        where: { tinNumber: tin },
+        data: { hrSoloManagerEnabled: next },
+      });
+      await writeApexAudit(apex.apexMemberId, "set_hr_solo_manager_enabled", {
+        targetTinNumber: tin,
+        payload: { enabled: next },
+      });
+      return true;
+    },
+
+    setTenantHrBiometricsEnabled: async (_, { tinNumber, enabled }, context) => {
+      const apex = assertApex(context);
+      const tin = String(tinNumber).trim();
+      const owner = await findTenantOwner(tin);
+      if (!owner) throw new Error("Tenant not found");
+      const account = await ensureTenantAccount(tin, owner);
+      const modules = parseModulesJson(account.modules ?? owner.modules);
+      if (enabled && !modules.includes("HR Module")) {
+        throw new Error("HR biometrics requires the HR Module");
+      }
+      const next = Boolean(enabled);
+      if (Boolean(account.hrBiometricsEnabled) === next) return true;
+      await prisma.tenant_account.update({
+        where: { tinNumber: tin },
+        data: { hrBiometricsEnabled: next },
+      });
+      await writeApexAudit(apex.apexMemberId, "set_hr_biometrics_enabled", {
         targetTinNumber: tin,
         payload: { enabled: next },
       });

@@ -263,6 +263,10 @@ export const typeDefs = gql`
     cafeOrderModeHistory: JSON
     """Apex permit: HotCol Waiter ordering for Café and Restaurant properties."""
     waiterOrderingEnabled: Boolean!
+    """Apex: café HR uses dedicated HR Manager role when true."""
+    hrSoloManagerEnabled: Boolean!
+    """Apex: enable biometric attendance devices when true."""
+    hrBiometricsEnabled: Boolean!
     salesAgentId: Int
     salesAgentName: String
   }
@@ -453,6 +457,10 @@ export const typeDefs = gql`
     updateTenantCafeOrderMode(tinNumber: String!, cafeOrderMode: String!): Boolean!
     """Apex-only: permit HotCol Waiter ordering for a Café and Restaurant property."""
     setTenantWaiterOrderingEnabled(tinNumber: String!, enabled: Boolean!): Boolean!
+    """Apex-only: café solo HR Manager role (vs Admin-hosted HR)."""
+    setTenantHrSoloManagerEnabled(tinNumber: String!, enabled: Boolean!): Boolean!
+    """Apex-only: enable HR biometric device sync."""
+    setTenantHrBiometricsEnabled(tinNumber: String!, enabled: Boolean!): Boolean!
     sendApexFeedbackMessage(threadId: Int!, body: String, imageUrl: String): FeedbackMessageRow!
     startApexChatWithTenant(tinNumber: String!, body: String!): FeedbackThreadDetail!
     """Post the same opening message into each selected property's chat thread."""
