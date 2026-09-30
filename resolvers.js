@@ -1624,6 +1624,44 @@ export const resolvers = {
       return true;
     },
 
+    updateTenantLogo: async (_, { tinNumber, logoUrl }, context) => {
+      const apex = assertApex(context);
+      const tin = String(tinNumber).trim();
+      const url = String(logoUrl || "").trim();
+      if (!tin) throw new Error("TIN is required");
+      if (!url) throw new Error("Logo URL is required");
+      if (!/^https?:\/\//i.test(url)) {
+        throw new Error("Logo URL must be an http(s) image URL");
+      }
+      const owner = await findTenantOwner(tin);
+      if (!owner) throw new Error("Tenant not found");
+      await ensureTenantAccount(tin, owner);
+      const previous =
+        (
+          await prisma.tenant_account.findUnique({
+            where: { tinNumber: tin },
+            select: { logoUrl: true },
+          })
+        )?.logoUrl ??
+        owner.LogoUrl ??
+        null;
+      await prisma.$transaction([
+        prisma.tenant_account.update({
+          where: { tinNumber: tin },
+          data: { logoUrl: url },
+        }),
+        prisma.user.updateMany({
+          where: { tinNumber: tin },
+          data: { LogoUrl: url },
+        }),
+      ]);
+      await writeApexAudit(apex.apexMemberId, "update_tenant_logo", {
+        targetTinNumber: tin,
+        payload: { previousLogoUrl: previous, logoUrl: url },
+      });
+      return true;
+    },
+
     setTenantWaiterOrderingEnabled: async (_, { tinNumber, enabled }, context) => {
       const apex = assertApex(context);
       const tin = String(tinNumber).trim();

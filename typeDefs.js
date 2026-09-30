@@ -1,4 +1,4 @@
-import { gql } from "apollo-server-express";
+﻿import { gql } from "apollo-server-express";
 
 export const typeDefs = gql`
   scalar DateTime
@@ -261,9 +261,9 @@ export const typeDefs = gql`
     operationalSnapshot: TenantOperationalSnapshot!
     cafeOrderMode: String!
     cafeOrderModeHistory: JSON
-    """Apex permit: HotCol Waiter ordering for Café and Restaurant properties."""
+    """Apex permit: HotCol Waiter ordering for CafÃ© and Restaurant properties."""
     waiterOrderingEnabled: Boolean!
-    """Apex: café HR uses dedicated HR Manager role when true."""
+    """Apex: cafÃ© HR uses dedicated HR Manager role when true."""
     hrSoloManagerEnabled: Boolean!
     """Apex: enable biometric attendance devices when true."""
     hrBiometricsEnabled: Boolean!
@@ -296,7 +296,7 @@ export const typeDefs = gql`
     lastMessage: FeedbackMessageRow
   }
 
-  """Every property on HotCol — with thread info when a chat exists."""
+  """Every property on HotCol â€” with thread info when a chat exists."""
   type FeedbackDirectoryRow {
     tinNumber: String!
     hotelDisplayName: String!
@@ -455,9 +455,11 @@ export const typeDefs = gql`
     approveOrderModeChangeRequest(requestId: Int!, reviewNote: String): Boolean!
     rejectOrderModeChangeRequest(requestId: Int!, reviewNote: String): Boolean!
     updateTenantCafeOrderMode(tinNumber: String!, cafeOrderMode: String!): Boolean!
-    """Apex-only: permit HotCol Waiter ordering for a Café and Restaurant property."""
+    """Apex-only: replace tenant property logo (Cloudinary URL). Does not change name, TIN, or business type."""
+    updateTenantLogo(tinNumber: String!, logoUrl: String!): Boolean!
+    """Apex-only: permit HotCol Waiter ordering for a CafÃ© and Restaurant property."""
     setTenantWaiterOrderingEnabled(tinNumber: String!, enabled: Boolean!): Boolean!
-    """Apex-only: café solo HR Manager role (vs Admin-hosted HR)."""
+    """Apex-only: cafÃ© solo HR Manager role (vs Admin-hosted HR)."""
     setTenantHrSoloManagerEnabled(tinNumber: String!, enabled: Boolean!): Boolean!
     """Apex-only: enable HR biometric device sync."""
     setTenantHrBiometricsEnabled(tinNumber: String!, enabled: Boolean!): Boolean!
