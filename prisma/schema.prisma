@@ -2306,7 +2306,7 @@ model hr_overtime_request {
   hours        Float    @default(0)
   amountETB    Float    @default(0)
   reason       String   @db.Text
-  /// pending | approved | rejected
+  /// pending | approved | rejected | paid
   status       String   @default("pending")
   requestedBy  String   @default("")
   decidedBy    String   @default("")
@@ -2340,19 +2340,29 @@ model hr_shift_template {
 }
 
 model hr_checklist_template {
-  id        Int      @id @default(autoincrement())
-  HotelName String
+  id          Int      @id @default(autoincrement())
+  HotelName   String
   /// onboarding | exit
-  kind      String
-  name      String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  kind        String
+  name        String
+  active      Boolean  @default(true)
+  /// When true, matching employees are expected to complete this checklist
+  required    Boolean  @default(true)
+  /// Department code; empty = all departments
+  department  String   @default("")
+  /// Job title / position; empty = all positions
+  jobTitle    String   @default("")
+  /// Optional team under department; null = any team
+  teamId      Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   items hr_checklist_template_item[]
   runs  hr_checklist_run[]
 
   @@index([HotelName, kind])
+  @@index([HotelName, department])
+  @@index([teamId])
 }
 
 model hr_checklist_template_item {
@@ -2437,6 +2447,10 @@ model hr_career_action {
   toDept      String   @default("")
   fromTitle   String   @default("")
   toTitle     String   @default("")
+  /// target team applied on Manager approve (null = keep current team)
+  toTeamId    Int?
+  /// leader | employee (applied on Manager approve)
+  toOrgPosition String @default("employee")
   /// pending | approved | rejected | applied
   status      String   @default("pending")
   createdBy   String   @default("")
